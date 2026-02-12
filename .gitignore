@@ -1,0 +1,21 @@
+# --- PyInstaller y Compilación ---
+build/
+dist/
+*.spec
+
+# --- Python Cache ---
+__pycache__/
+*.pyc
+
+# --- Carpetas de Salida / Temporales ---
+aux_files/
+Test1/
+informes/
+
+# --- Carpetas de Backups (Mala práctica en Git) ---
+Logica_v1.8/
+
+# --- Configuración de entorno local ---
+.python-version
+.vscode/
+.idea/

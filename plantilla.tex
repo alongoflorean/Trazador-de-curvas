@@ -1,0 +1,206 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{booktabs} 
+\usepackage{caption} % Necesario para usar \captionof
+
+\geometry{
+    top=4cm, 
+    bottom=3cm, 
+    left=2cm, 
+    right=2cm, 
+    headheight=2.5cm, 
+    headsep=0.5cm
+}
+
+\begin{document}
+
+% ==========================================
+%               CARÁTULA
+% ==========================================
+
+\begin{titlepage}
+    \thispagestyle{empty} 
+    \centering
+    \vspace*{2cm}
+    {\Huge \textbf{(( titulo ))}} \\[0.5cm]
+    {\Large (( subtitulo ))} \\[1cm]
+    \rule{\linewidth}{1pt} \\[1.5cm] 
+    
+    \begin{flushleft}
+        \large
+        \textbf{Modelo:} (( modelo )) \\
+        \textbf{Tipo:} (( tipo )) \\
+        \textbf{Fecha:} (( fecha ))
+    \end{flushleft}
+\end{titlepage}
+
+% --- PÁGINA DE CONTENIDO ---
+\newpage
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\includegraphics[height=1.5cm]{(( logo_path ))}} 
+\fancyfoot[R]{Página \thepage\ de \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ==========================================
+%           SECCIÓN DE SALIDA
+% ==========================================
+\BLOCK{ if show_salida }
+\section*{Análisis de Salida}
+
+\begin{figure}[h!]
+    \centering
+    % Gráfico Principal: IC vs VCE (Más grande o a la izquierda)
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{(( plot_salida_ic ))}
+        \caption{Familia de Curvas: $I_C$ vs $V_{CE}$}
+    \end{minipage}
+    \hfill
+    % Gráfico Secundario: IB vs VCE (Para verificar cte)
+    \BLOCK{ if plot_salida_ib }
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{(( plot_salida_ib ))}
+        \caption{Control: $I_B$ vs $V_{CE}$}
+    \end{minipage}
+    \BLOCK{ endif }
+\end{figure}
+
+% TABLA DE DATOS (Inmediatamente después de las figuras)
+\begin{center}
+    {\small (( tabla_salida )) }
+    \captionof{table}{Muestra de datos medidos en zona activa (Inicio, Medio, Fin de cada curva).}
+\end{center}
+
+\BLOCK{ endif }
+
+% ==========================================
+%           SECCIÓN DE ENTRADA
+% ==========================================
+\BLOCK{ if show_entrada }
+\newpage
+\section*{Análisis de Entrada}
+
+% Gráficos de Tensión y Corriente
+\begin{figure}[h!]
+    \centering
+    % Primera fila de gráficos
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{(( plot_entrada_ib ))}
+        \caption{$I_B$ vs $V_{BE}$}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{(( plot_entrada_vbe_ic ))}
+        \caption{$V_{BE}$ vs $I_C$}
+    \end{minipage}
+
+    \vspace{0.3cm}
+
+    % Gráfico de Transferencia solo (o podrias ponerlo arriba si entra)
+    \begin{minipage}{0.6\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{(( plot_entrada_trans ))}
+        \caption{$I_C$ vs $V_{BE}$}
+    \end{minipage}
+\end{figure}
+
+% TABLA ESPECÍFICA PARA ESTOS GRÁFICOS
+\begin{center}
+    {\small (( tabla_entrada_vi )) }
+    \captionof{table}{Datos medidos de Tensión y Corriente (Muestra)}
+\end{center}
+
+\clearpage % Para separar HFE
+
+% Análisis de Ganancia
+\section*{Análisis de Ganancia de Corriente DC}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.85\textwidth]{(( plot_entrada_hfe ))}
+    \caption{Evolución del parámetro $h_{FE}$ según corriente de colector.}
+\end{figure}
+
+% TABLA ESPECÍFICA PARA HFE
+\begin{center}
+    \vspace{-0.5cm}
+    {\small (( tabla_entrada_hfe )) }
+    \captionof{table}{Valores calculados de $h_{FE}$ e incertidumbre asociada.}
+\end{center}
+
+\BLOCK{ endif }
+
+% ==========================================
+%           HOJA DE FÓRMULAS
+% ==========================================
+
+\clearpage
+
+\section*{Sección de fórmulas: Funciones de medición e incertidumbres}
+\noindent En esta sección se resumen las expresiones matemáticas fundamentales utilizadas para la caracterización del transistor y el cálculo de sus incertidumbres asociadas.
+
+\subsection*{Funciones de Medición}
+Se asume el emisor conectado directamente a masa ($V_e = 0V$). Las tensiones y corrientes se determinan mediante:
+
+\begin{itemize}
+    \item \textbf{Tensión de Colector ($V_c$):} 
+    \[ V_c = \frac{C \cdot V_{ref}}{2^{N_{ADS}}-1} \]
+    \item \textbf{Tensión de Base ($V_b$):} 
+    \[ V_b = \frac{C \cdot V_{ref}}{2^{N_{ADS}}-1} \]
+    \item \textbf{Corriente de Base ($I_b$):} 
+    \[ I_b = \frac{V_2 - V_1}{R_{shuntB}} \] 
+    \item \textbf{Corriente de Colector ($I_c$):} 
+    \[ I_c = c \cdot \frac{V_{ref}}{2^{N_{INA}}} \cdot \frac{1}{R_{shunt_{INA}}} \] 
+    \item \textbf{Ganancia de Corriente ($HFE$):} 
+    \[ HFE = \frac{I_c(Q)}{I_b(Q)} \] 
+\end{itemize}
+
+\subsection*{Fórmula de Incertidumbres}
+
+\begin{itemize}
+    \item \textbf{Incertidumbre de la Tensión de Colector ($u_r(V_c)$):} 
+    \[ u_r(V_c) = \sqrt{u_r(c_{ADC})^2 + u_r(V_{ref})^2} \]
+    \item \textbf{Incertidumbre de la Corriente de Colector ($u_c(I_c)$):} 
+    \[ u_c(I_c) = \sqrt{u_r(c_{INA})^2 + u_r(R_{INA})^2} \cdot \overline{I_c} \]
+    \item \textbf{Incertidumbre de la Corriente de Base ($u_c(I_b)$):} 
+    \[ u_c(I_b) = \sqrt{\left(\frac{u(V_2)}{R_{shuntB}}\right)^2 + \left(\frac{-u(V_1)}{R_{shuntB}}\right)^2 + \left(\frac{V_2-V_1}{R_{shuntB}^2} u(R_{shuntB})\right)^2} \]
+\end{itemize}
+
+% ==========================================
+%           PÁGINA DE FIRMAS
+% ==========================================
+\newpage
+\noindent \textit{Nota: Todas las tablas muestran el punto inicial, medio y final de cada barrido realizado.}
+
+\vspace{0.5cm}
+\noindent Los ensayos fueron realizados bajo una temperatura de \textbf{(( temperatura )) °C} y una humedad de \textbf{(( humedad )) \%}.
+\section*{Personal Técnico Interviniente}
+La presente medición y análisis ha sido avalada por el siguiente equipo técnico:
+
+\vspace{1.5cm} 
+
+\noindent
+\begin{tabular}{cc}
+\BLOCK{ for tecnico in tecnicos }
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \vspace{1.5cm}
+        \rule{6cm}{0.4pt} \\ % Línea de firma
+        \textbf{(( tecnico.nombre ))} \\
+        (( tecnico.contacto )) \\
+        \textit{Firma Digital}
+    \end{minipage} 
+    \BLOCK{ if loop.index is divisibleby 2 } \\[1.5cm] \BLOCK{ else } \hspace{0.2cm} \BLOCK{ endif }
+\BLOCK{ endfor }
+\end{tabular}
+
+\end{document}
