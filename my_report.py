@@ -6,7 +6,7 @@ from jinja2 import Environment, FileSystemLoader
 import pandas as pd
 import sys
 
-def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547"):
+def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, modelo_transistor="BC547"):
     # Obtener la fecha actual formateada    
     meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
              "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -23,10 +23,9 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
     # Archivos necesarios en la raíz
     archivo_logo = "pictures/logo_institucion.png"
 
-    # Rutas Base (Asumiendo carpeta Test1)
-    # Nota: Es mejor pasar la ruta del proyecto como argumento a la función.
-    path_salida = "Test1/Salida"
-    path_entrada = "Test1/Entrada"
+    # Rutas dinámicas basadas en el proyecto actual
+    path_entrada = os.path.join(proyect_path, "Entrada")
+    path_salida = os.path.join(proyect_path, "Salida")
 
     # Definición de archivos esperados (Usamos .get para evitar errores si no existen)
     plots = {
@@ -118,7 +117,7 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
                 
                 # Generamos el código LaTeX
                 tabla_salida_latex = df_final_s.to_latex(
-                    index=False, float_format="%.2f", column_format='|c|c|c|c|c|c|', escape=False
+                    index=False, float_format=lambda x: "{:.3g}".format(x), column_format='|c|c|c|c|c|c|', escape=False
                 ).replace('\\\\\n', '\\\\ \\hline\n')
         
         # --- PROCESAR ENTRADA ---
@@ -143,7 +142,7 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
             # TABLA 1: Características V/I (primeros 3 gráficos)
             cols_map_vi = {
                 'VBE_V': r'$V_{BE} [V]$',
-                'U_VBE_V': r'$\pm U_(V_{BE}) [V]$', 
+                'U_VBE_V': r'$\pm U(V_{BE}) [V]$', 
                 'IB_uA': r'$I_B [\mu A]$', 
                 'U_IB_uA': r'$\pm U(I_B) [\mu A]$', 
                 'IC_mA': r'$I_C [mA]$',
@@ -154,7 +153,7 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
             df_vi = df_red_e[cols_existentes_vi].rename(columns=cols_map_vi)
 
             tabla_entrada_vi_latex = df_vi.to_latex(
-                index=False, float_format="%.3f", column_format='|c|c|c|c|c|c|', escape=False
+                index=False, float_format=lambda x: "{:.3g}".format(x), column_format='|c|c|c|c|c|c|', escape=False
             ).replace('\\\\\n', '\\\\ \\hline\n')
 
             # TABLA 2: Solo para HFE
@@ -162,14 +161,14 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
                 'IC_mA': r'$I_C [mA]$',
                 'U_IC_mA': r'$\pm U(I_C) [mA]$',
                 'HFE': r'$H_{FE} [-]$',
-                'U_HFE': r'$\pm U(H_{FE} [-])$'
+                'U_HFE': r'$\pm U(H_{FE}) [-]$'
             }
             # Filtramos solo esas columnas
             cols_existentes_hfe = [c for c in cols_map_hfe.keys() if c in df_e.columns]
             df_hfe = df_red_e[cols_existentes_hfe].rename(columns=cols_map_hfe)
 
             tabla_entrada_hfe_latex = df_hfe.to_latex(
-                index=False, float_format="%.2f", column_format='|c|c|c|c|', escape=False
+                index=False, float_format=lambda x: "{:.3g}".format(x), column_format='|c|c|c|c|', escape=False
             ).replace('\\\\\n', '\\\\ \\hline\n')
 
     except Exception as e:
@@ -188,6 +187,7 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
             "logo_path": os.path.abspath(archivo_logo).replace('\\', '/'),
             "temperatura": str(temperatura),
             "humedad": str(humedad),
+            "muestras": Muestras,
             "tecnicos": [
                 {"nombre": "Octavio Puz", "contacto": "opuzbattellini@frba.utn.edu.ar"},
                 {"nombre": "Guido Spataro", "contacto": "gspatarosaponara@frba.utn.edu.ar"},
@@ -222,17 +222,12 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
         print("Compilando informe...")
         os.chdir(directorio_aux) # CAMBIO DE DIRECTORIO TEMPORAL
         
-        startup_flags = 0
-        if os.name == 'nt': # Solo en Windows
-            startup_flags = subprocess.CREATE_NO_WINDOW
-
         for i in range(2):
             # Al estar ya dentro de aux_files, no necesitamos -output-directory
             result = subprocess.run(
                 ['pdflatex', '-interaction=nonstopmode', output_tex_name],
                 capture_output=True,
-                text=True,
-                creationflags=startup_flags
+                text=True
             )
 
         # Volvemos a la raíz
@@ -259,5 +254,8 @@ def generar_pdf_final(temperatura=25.0, humedad=55.0, modelo_transistor="BC547")
 
 if __name__ == "__main__":
     # Llamada simple segura para pruebas directas o desde mainwindow
-    modelo_arg = sys.argv[1] if len(sys.argv) > 1 else "BC547"
-    generar_pdf_final(modelo_transistor=modelo_arg)
+    modelo_arg = sys.argv[1] if len(sys.argv) > 1 else "BC547"      # Modelo
+    muestras_arg = int(sys.argv[2]) if len(sys.argv) > 2 else 10    # Muestras
+    path_arg = sys.argv[3]                                          # self.proyect_path (La carpeta del proyecto)
+
+    generar_pdf_final(Muestras=muestras_arg, proyect_path=path_arg, modelo_transistor=modelo_arg)

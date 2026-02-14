@@ -97,7 +97,9 @@ class Ui_Form:
         layout.addWidget(self.select_folder_button)
 
         # Enviar datos
-        layout.addWidget(QLabel("Enviar trama:"))
+        if debugg:
+            layout.addWidget(QLabel("Enviar trama:"))
+
         h_layout = QHBoxLayout()
         self.send_combo = QComboBox()
         self.send_combo.setEditable(False)
@@ -112,6 +114,11 @@ class Ui_Form:
         self.btn_test.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold;") # Violeta para distinguir
         self.btn_test.setToolTip("Verificar estado del transistor (HFE >= 50)")
         h_layout.addWidget(self.btn_test) # Mismo layout horizontal
+
+        if not debugg:
+            self.btn_test.setVisible(False)  # Existe, pero es invisible
+            self.send_combo.setVisible(False)
+            self.send_button.setVisible(False)
 
         self.config_group = QGroupBox("Configuración Inicial")
         self.config_layout = QHBoxLayout()
@@ -132,12 +139,14 @@ class Ui_Form:
         self.btn_config = QPushButton("Inicializar ESP32")
         self.btn_config.setStyleSheet("background-color: #d35400; color: white; font-weight: bold;")
 
+        if not debugg:
+            self.btn_config.setVisible(False)
+
         self.time_label = QLabel("Tiempo estimado: -")
         self.time_label.setStyleSheet("color: #2a82da; font-weight: bold; font-size: 12px;")
-        self.time_label.setAlignment(Qt.AlignCenter) # Asegúrate de importar Qt de PyQt5.QtCore
-        # ------------------------------------------
+        self.time_label.setAlignment(Qt.AlignCenter)
 
-        # 5. Agregar todo al layout horizontal del grupo
+        # Agregar todo al layout horizontal del grupo
         self.config_layout.addWidget(self.label_muestras)
         self.config_layout.addWidget(self.spin_muestras)
         self.config_layout.addSpacing(20)
@@ -145,9 +154,6 @@ class Ui_Form:
         self.config_layout.addWidget(self.spin_curvas)
         self.config_layout.addSpacing(20)
         self.config_layout.addWidget(self.btn_config)
-        
-        # Como el layout es Horizontal, el tiempo quedaría mejor ABAJO de los controles.
-        # Cambiemos la estrategia del layout del grupo a Vertical para meter controles arriba y tiempo abajo.
         
         # REEMPLAZO DE LA ESTRUCTURA DEL LAYOUT DEL GRUPO:
         self.group_main_layout = QVBoxLayout() # Layout vertical principal del grupo
@@ -172,7 +178,7 @@ class Ui_Form:
         layout.addWidget(self.config_group)
 
         # Recibir datos
-        if debugg == True:
+        if debugg:
             layout.addWidget(QLabel("Datos recibidos:"))
             self.receive_text = QTextEdit()
             self.receive_text.setReadOnly(True)
@@ -183,7 +189,7 @@ class Ui_Form:
             self.exit_plot_button = QPushButton("Plot de salida")
             button_layout.addWidget(self.exit_plot_button)
 
-            self.entry_plot_button = QPushButton("Plot de entrada")  # ← tu nuevo botón
+            self.entry_plot_button = QPushButton("Plot de entrada")
             button_layout.addWidget(self.entry_plot_button)
 
             layout.addLayout(button_layout)
@@ -194,13 +200,26 @@ class Ui_Form:
             model_layout = QHBoxLayout()
             model_layout.addWidget(QLabel("Modelo de Transistor:"))
             self.model_input = QLineEdit()
-            self.model_input.setPlaceholderText("Ej: BC547, 2N3904...")
-            self.model_input.setText("BC547") # Valor por defecto
+            self.model_input.setPlaceholderText("Ej: BC547, 2N2222...")
+            self.model_input.setText("Generico NPN") # Valor por defecto
             model_layout.addWidget(self.model_input)
             
             layout.addLayout(model_layout)
             
             layout.addWidget(self.report_button)
+        else:
+            model_layout = QHBoxLayout()
+            model_layout.addWidget(QLabel("Modelo de Transistor:"))
+            self.model_input = QLineEdit()
+            self.model_input.setPlaceholderText("Ej: BC547, 2N2222...")
+            self.model_input.setText("Generico NPN") # Valor por defecto
+            model_layout.addWidget(self.model_input)
+            layout.addLayout(model_layout)
+
+            self.full_report_button = QPushButton("Generar Informe")
+            self.full_report_button.setStyleSheet("font-weight: bold; background-color: #4CAF50; color: white;")
+            # self.btn_test.setToolTip("Mensaje simple de descripcion")
+            layout.addWidget(self.full_report_button)
 
         Form.setLayout(layout)
     

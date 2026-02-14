@@ -9,7 +9,7 @@ __pycache__/
 
 # --- Carpetas de Salida / Temporales ---
 aux_files/
-Test1/
+Resultados_Default/
 informes/
 
 # --- Carpetas de Backups (Mala práctica en Git) ---

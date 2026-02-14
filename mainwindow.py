@@ -24,13 +24,13 @@ import os
 from PyQt5.QtWidgets import QFileDialog
 import pandas as pd
 import matplotlib.pyplot as plt
-import subprocess
 from matplotlib.patches import Rectangle
-
-import incertidumbre
 import my_report
 
-DEBUGG = True
+import incertidumbre
+
+
+DEBUGG = False
 DARK_MODE = True
 
 OK = 1
@@ -88,6 +88,10 @@ class SerialReader(QThread):
         self.wait()
 
 class TrazadorApp(QWidget):
+    # Señales para el modo auto
+    sig_test_finalizado = pyqtSignal(bool)
+    sig_barrido_finalizado = pyqtSignal()
+
     def __init__(self):
         '''
         Clase TrazadorApp
@@ -134,14 +138,13 @@ class TrazadorApp(QWidget):
         self.R_SHUNT_BASE = 1000.0    # Ohms (La resistencia de base)
 
         # SEÑALES
-
         self.ui.select_folder_button.clicked.connect(self.select_folder)
         self.ui.refresh_button.clicked.connect(self.refresh_ports)
         self.ui.open_button.clicked.connect(self.open_port)
         self.ui.send_button.clicked.connect(self.send_data)
         self.ui.btn_config.clicked.connect(self.send_configuration)
         self.ui.btn_test.clicked.connect(self.realizar_test)
-        
+
         # Cositas para poder ver el tiempo de medicion...perdon pero me copo
         self.ui.spin_muestras.valueChanged.connect(self.update_estimation)
         self.ui.spin_curvas.valueChanged.connect(self.update_estimation)
@@ -156,27 +159,39 @@ class TrazadorApp(QWidget):
         # Llamada inicial para que no aparezca vacio
         self.update_estimation()
 
+        # Cuando el Test termine --> Ejecutar 'on_test_finished'
+        self.sig_test_finalizado.connect(self.on_test_finished)
+        
+        # Cuando un Barrido termine --> Ejecutar 'on_sweep_finished'
+        self.sig_barrido_finalizado.connect(self.on_sweep_finished)
+
+        # Variable de Estado (Saber en qué paso estamos)
+        self.current_state = 0  # 0:Idle, 1:Test, 2:Entrada, 3:Salida
+
         if DEBUGG:
             self.ui.exit_plot_button.clicked.connect(self.procesar_y_graficar_salida)
             self.ui.entry_plot_button.clicked.connect(self.procesar_y_graficar_entrada)
             self.ui.report_button.clicked.connect(self.generate_report)
+        else:
+            self.ui.full_report_button.clicked.connect(self.full_generate_report)
 
         self.refresh_ports()
-        if DEBUGG:
-            os.makedirs("Test1",exist_ok=True)
-            self.proyect_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Test1")
-            # Chequeo si ya existian carpetas de proyecto, si no existían las creo
-            required_subfolders = ["Entrada", "Salida"]
-            for subfolder in required_subfolders:
-                subfolder_path = os.path.join(self.proyect_path, subfolder)
-                if not os.path.exists(subfolder_path):
-                    os.makedirs(subfolder_path)
-            self.ui.status_label.setText(f"Carpeta seleccionada:\n{self.proyect_path}")
-            self.ui.status_label.setStyleSheet("color: green;")
 
+        # if DEBUGG:
+        os.makedirs("Resultados_Default",exist_ok=True)
+        self.proyect_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Resultados_Default")
+        # Chequeo si ya existian carpetas de proyecto, si no existían las creo
+        required_subfolders = ["Entrada", "Salida"]
+        for subfolder in required_subfolders:
+            subfolder_path = os.path.join(self.proyect_path, subfolder)
+            if not os.path.exists(subfolder_path):
+                os.makedirs(subfolder_path)
+        self.ui.status_label.setText(f"Carpeta seleccionada:\n{self.proyect_path}")
+        self.ui.status_label.setStyleSheet("color: green;")
 
-        else:
-            self.open_folder_dialog()
+        # No lo borro porque podria usarse la verdad, por comodidad me parecio un paso extra inecesario
+        # else:
+            # self.open_folder_dialog()
 
 
     def open_folder_dialog(self):
@@ -268,9 +283,14 @@ class TrazadorApp(QWidget):
         except serial.SerialException as e:
             QMessageBox.critical(self, "Error", f"No se pudo abrir el puerto:\n{e}")
 
-    def send_data(self):
+    def send_data(self, comando_manual=None):
         if self.serial_port and self.serial_port.is_open:
-            self.data_send = self.ui.send_combo.currentText()
+
+            if comando_manual:
+                self.data_send = comando_manual
+            else:
+                self.data_send = self.ui.send_combo.currentText()
+
             if self.data_send:
                 try:
                     self.serial_port.write((self.data_send + '\n').encode())
@@ -293,25 +313,38 @@ class TrazadorApp(QWidget):
                     valor_HFE = parts[2]
                     
                     if resultado == "OK":
-                        QMessageBox.information(
-                            self.ui, 
-                            "Resultado Exitoso", 
-                            f"Transistor en buen estado\n\nGanancia medida (HFE): {valor_HFE}"
-                        )
+                        # Señal de test OK para el modo auto
+                        self.sig_test_finalizado.emit(True)
+
+                        if DEBUGG:
+                            QMessageBox.information(
+                                self.ui, 
+                                "Resultado Exitoso", 
+                                f"Transistor en buen estado\n\nGanancia medida (HFE): {valor_HFE}"
+                            )
                     else:
-                        # MENSAJE DE ERROR DETALLADO
-                        QMessageBox.critical(
-                            self.ui, 
-                            "Falla en el componente", 
-                            f"PRUEBA FALLIDA (HFE = {valor_HFE})\n\n"
-                            "Posibles causas:\n"
-                            "1. El transistor está dañado (Abierto/Corto).\n"
-                            "2. Conexión incorrecta o falsos contactos.\n"
-                            "3. El componente no es un BJT NPN compatible."
-                        )
+                        self.sig_test_finalizado.emit(False)
+
+                        if DEBUGG:
+                            # Mensaje de error detallado
+                            QMessageBox.critical(
+                                self.ui, 
+                                "Falla en el componente", 
+                                f"PRUEBA FALLIDA (HFE = {valor_HFE})\n\n"
+                                "Posibles causas:\n"
+                                "1. El transistor está dañado (Abierto/Corto).\n"
+                                "2. Conexión incorrecta o falsos contactos.\n"
+                                "3. El componente no es un BJT NPN compatible."
+                            )
                     return # Importante: No seguir procesando para que no se guarde en el CSV
+                
             except Exception as e:
                 print(f"Error procesando test: {e}")
+
+        if "# Fin" in data:
+            # El Arduino terminó de enviar datos de Entrada o Salida
+            self.sig_barrido_finalizado.emit()
+            # No hacemos return aquí porque quizás se quiera guardar esa línea en el log
 
         # Guardar en archivo si se seleccionó carpeta
         if self.proyect_path:
@@ -453,10 +486,12 @@ class TrazadorApp(QWidget):
         if not modelo: 
             modelo = "Generico"
 
+        cant_muestras = str(self.ui.spin_muestras.value()) 
+
         if not os.path.exists(script_path):
             QMessageBox.critical(self, "Error", f"No se encuentra el script en:\n{script_path}")
             return
-
+        
         # 3. Crear y mostrar diálogo de espera (Modal)
         waiting = WaitingDialog(self)
         waiting.show()
@@ -464,15 +499,123 @@ class TrazadorApp(QWidget):
         QApplication.processEvents()
 
         try:
-            # 4. EJECUCIÓN ÚNICA: Pasamos 'modelo' en la lista de argumentos
+             # 4. EJECUCIÓN ÚNICA: Pasamos 'modelo' en la lista de argumentos
             t_val, h_val = self.leer_condiciones('salida')
-            my_report.generar_pdf_final(temperatura=t_val, humedad=h_val, modelo_transistor=modelo)
+            my_report.generar_pdf_final(temperatura=t_val, proyect_path=self.proyect_path, humedad=h_val, Muestras=cant_muestras, modelo_transistor=modelo)
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Fallo al generar informe:\n{e}")
         finally:
             # 5. Cerrar diálogo al finalizar
             waiting.close()
+
+    def full_generate_report(self):
+        """
+        Inicio de la Secuencia Automática.
+        """
+
+        # Chequeo de seguridad
+        if not self.serial_port or not self.serial_port.is_open:
+            QMessageBox.warning(self, "Error", "Conecte el puerto primero.")
+            return
+
+        # Bloquear UI para que el usuario no toque nada mientras trabaja
+        self.ui.full_report_button.setEnabled(False)
+        self.ui.full_report_button.setText("Ejecutando Test...")
+        self.ui.status_label.setText("Estado: Iniciando secuencia...")
+
+        # Asegurar configuración (Muestras/Curvas)
+        self.send_configuration()
+        QThread.msleep(1)
+        
+        # --- INICIO DE LA MÁQUINA DE ESTADOS ---
+        self.current_state = 1  # Pasamos a Estado 1 (Testing)
+        self.realizar_test()    # Disparamos la acción
+        
+        # Ahora esperamos a que suene la señal 'sig_test_finalizado'.
+
+    
+    def on_test_finished(self, paso_ok):
+        """
+        Se ejecuta cuando llega la señal sig_test_finalizado(bool)
+        """
+        # Verificamos que estemos en el paso correcto de la secuencia
+        if self.current_state != 1: 
+            return
+
+        if paso_ok:
+            # --- TRANSICIÓN: DEL TEST (1) A ENTRADA (2) ---
+            self.current_state = 2
+            self.ui.full_report_button.setText("Midiendo Entrada...")
+            self.ui.status_label.setText("Estado: Midiendo Curva de Entrada...")
+            
+            # Disparar siguiente acción (usamos tu función existente)
+            self.send_data("LEER_ENTRADA") 
+            
+        else:
+            # --- FALLO: ABORTAR ---
+            mensaje_error = (
+                "El componente no pasó el TEST.\n\n"
+                "Posibles causas:\n"
+                "1. El transistor está dañado (Abierto/Corto).\n"
+                "2. Conexión incorrecta o falsos contactos.\n"
+                "3. El componente no es un BJT NPN compatible."
+            )
+            self.abortar_secuencia(mensaje_error)
+
+    def on_sweep_finished(self):
+        """
+        Se ejecuta cuando llega la señal sig_barrido_finalizado()
+        """
+        # CASO A: Terminó el barrido de ENTRADA (Estado 2)
+        if self.current_state == 2:
+            # --- TRANSICIÓN: DE ENTRADA (2) A SALIDA (3) ---
+            self.current_state = 3
+            self.ui.full_report_button.setText("Midiendo Salida...")
+            self.ui.status_label.setText("Estado: Midiendo Curva de Salida...")
+            
+            # Configurar variable de envío
+            self.data_send = "LEER_SALIDA"
+            
+            # Disparar siguiente acción
+            self.send_data()
+
+        # CASO B: Terminó el barrido de SALIDA (Estado 3)
+        elif self.current_state == 3:
+            # --- FIN: DE SALIDA (3) A REPORTE ---
+            self.ui.full_report_button.setText("Generando PDF...")
+            self.ui.status_label.setText("Estado: Procesando datos...")
+            
+            # Procesar y Generar
+            try:
+                self.procesar_y_graficar_entrada()
+                self.procesar_y_graficar_salida()
+                self.generate_report() # Tu script externo
+                
+                # Restaurar todo
+                self.ui.status_label.setText("Estado: ¡Informe Terminado!")
+                QMessageBox.information(self, "Éxito", "Secuencia completada. Informe generado.")
+                
+            except Exception as e:
+                self.abortar_secuencia(f"Error al generar informe: {e}")
+            
+            finally:
+                self.reset_ui_state()
+
+    def abortar_secuencia(self, mensaje):
+        """
+        Función auxiliar para cancelar todo si algo sale mal
+        """
+        QMessageBox.critical(self, "Error", mensaje)
+        self.ui.status_label.setText("Estado: Error en secuencia.")
+        self.reset_ui_state()
+
+    def reset_ui_state(self):
+        """Devuelve el botón a la normalidad"""
+        self.current_state = 0
+        self.ui.full_report_button.setEnabled(True)
+        self.ui.full_report_button.setText("Generar Informe Completo")
+
 
     def send_configuration(self):
         """
@@ -528,7 +671,7 @@ class TrazadorApp(QWidget):
         
         total_ms = 0.0
         
-        # --- CONSTANTES CALIBRADAS ---
+        # --- CONSTANTES "MEDIDAS" ---
         # SALIDA
         OUT_OVERHEAD_PER_CURVE = 448.0  # Tiempo muerto por curva (setup DAC, delay)
         OUT_TIME_PER_SAMPLE    = 276.0  # Tiempo de proceso por cada muestra de promedio
@@ -536,11 +679,12 @@ class TrazadorApp(QWidget):
         # ENTRADA
         IN_BASE_TIME           = 2200.0 # Tiempo fijo (búsqueda de límites + overhead)
         IN_TIME_PER_SAMPLE     = 392.0  # Tiempo extra por cada muestra de promedio
-        
-        # TEST
-        TEST_TIME              = 2500.0 # Tiempo fijo para el test rápido
 
         # --- CÁLCULO ---
+
+        if not DEBUGG:
+            modo = "LEER_TODO"
+
         if modo == "LEER_SALIDA":
             # Formula: Curvas * (Fijo + Variable*Muestras)
             time_per_curve = OUT_OVERHEAD_PER_CURVE + (OUT_TIME_PER_SAMPLE * n_muestras)
@@ -555,9 +699,6 @@ class TrazadorApp(QWidget):
             t_salida = n_curvas * (OUT_OVERHEAD_PER_CURVE + (OUT_TIME_PER_SAMPLE * n_muestras))
             t_entrada = IN_BASE_TIME + (IN_TIME_PER_SAMPLE * n_muestras)
             total_ms = t_salida + t_entrada
-            
-        elif modo == "TEST":
-            total_ms = TEST_TIME
 
         # --- FORMATO ---
         texto_tiempo = ""
