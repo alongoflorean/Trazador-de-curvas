@@ -13,7 +13,7 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
     now = datetime.now()
     fecha_espanol = f"{now.day} de {meses[now.month - 1]} de {now.year}"
 
-    # 1. Configuración de carpetas y nombres
+    # Configuración de carpetas y nombres
     directorio_root = os.getcwd()
     directorio_aux = os.path.join(directorio_root, "aux_files")
     
@@ -27,7 +27,6 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
     path_entrada = os.path.join(proyect_path, "Entrada")
     path_salida = os.path.join(proyect_path, "Salida")
 
-    # Definición de archivos esperados (Usamos .get para evitar errores si no existen)
     plots = {
         "salida_ic": os.path.join(path_salida, "curva_IC_vs_VCE.png"),
         "salida_ib": os.path.join(path_salida, "curva_IB_vs_VCE.png"),
@@ -41,7 +40,7 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
     if not os.path.exists(archivo_logo):
         print(f"Warning: Falta logo en {archivo_logo}")
 
-    # 2. Configuración de Jinja2
+    # Configuración de Jinja2
     env = Environment(
         loader=FileSystemLoader(directorio_root),
         block_start_string='\\BLOCK{',
@@ -50,13 +49,13 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
         variable_end_string='))'
     )
     
-    # ... Inicialización de variables para el contexto
+    # Inicialización de variables para el contexto
     tabla_salida_latex = ""
     tabla_entrada_latex = ""
     show_salida = False
     show_entrada = False
 
-    # --- INTENTO DE LEER TEMPERATURA REAL DEL CSV CRUDO ---
+    # INTENTO DE LEER TEMPERATURA REAL DEL CSV CRUDO
     # Buscamos el archivo crudo 'salida.csv' que tiene los datos del sensor
     try:
         raw_csv = os.path.join(path_salida, "salida.csv")
@@ -64,7 +63,7 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
             # Leemos solo las primeras filas o todo para sacar el promedio
             df_raw = pd.read_csv(raw_csv, comment='#')
             
-            # Buscamos columnas que contengan "Temp" y "Hum" (flexible por si cambias nombres)
+            # Buscamos columnas que contengan "Temp" y "Hum"
             col_t = next((c for c in df_raw.columns if "Temp" in c), None)
             col_h = next((c for c in df_raw.columns if "Hum" in c), None)
             
@@ -80,18 +79,17 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
         print(f"No se pudo leer temperatura/humedad del CSV raw: {e}")
 
     try:
-        # --- PROCESAR SALIDA ---
+        #       PROCESAR SALIDA
         csv_salida = os.path.join(path_salida, "salida_fisica.csv")
         
-        # Inicializamos vacía
         tabla_salida_latex = ""
 
         if os.path.exists(csv_salida):
             df_s = pd.read_csv(csv_salida)
             show_salida = True
             
-            # Detectamos la columna de agrupación (generalmente "Indice" o "IB_uA")
-            # Usamos "Indice" para iterar ordenadamente por curva
+            # Detectamos la columna de agrupación
+            # Usamos "Indice" para iterar por curva
             if "Indice" in df_s.columns:
                 puntos_tabla = []
                 for nombre_grupo, grupo in df_s.groupby("Indice"):
@@ -103,12 +101,12 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
                 
                 # Definimos qué columnas mostrar y sus nombres bonitos en LaTeX
                 cols_map_s = {
-                    'IB_uA': r'$I_B [\mu A]$',      # Parámetro de la curva
-                    'U_IB_uA': r'$\pm U(I_B) [\mu A]$', # Parámetro de la curva
-                    'VCE_V': r'$V_{CE} [V]$',       # Eje X
+                    'IB_uA': r'$I_B [\mu A]$',
+                    'U_IB_uA': r'$\pm U(I_B) [\mu A]$',
+                    'VCE_V': r'$V_{CE} [V]$',           # Eje X
                     'U_VCE_V': r'$\pm U(V_{CE}) [V]$',  # Incertidumbre del eje X
-                    'IC_mA': r'$I_C [mA]$',         # Eje Y
-                    'U_IC_mA': r'$\pm U(I_C) [mA]$' # Incertidumbre del eje y
+                    'IC_mA': r'$I_C [mA]$',             # Eje Y
+                    'U_IC_mA': r'$\pm U(I_C) [mA]$'     # Incertidumbre del eje y
                 }
                 
                 # Filtramos solo las que existen en el CSV
@@ -120,7 +118,7 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
                     index=False, float_format=lambda x: "{:.3g}".format(x), column_format='|c|c|c|c|c|c|', escape=False
                 ).replace('\\\\\n', '\\\\ \\hline\n')
         
-        # --- PROCESAR ENTRADA ---
+        #  PROCESAR ENTRADA 
         csv_entrada = os.path.join(path_entrada, "entrada_fisica.csv")
         
         # Inicializamos vacías por si no entra al if
@@ -211,29 +209,51 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
             "tabla_entrada_hfe": tabla_entrada_hfe_latex
         }
 
-        # 3. Generar el archivo .tex dentro de la carpeta aux
+        # Generar el archivo .tex dentro de la carpeta aux
         output_tex_name = "informe_compilado.tex"
         output_tex_path = os.path.join(directorio_aux, output_tex_name)
         
         with open(output_tex_path, 'w', encoding='utf-8') as f:
             f.write(template.render(contexto))
 
-        # 4. Compilación: Entramos a la carpeta aux para ejecutar pdflatex
+        # Compilación: Entramos a la carpeta aux para ejecutar pdflatex
         print("Compilando informe...")
+
+
+        # CONFIGURACIÓN LATEX: EXCLUSIVO PARA WINDOWS (PORTABLE)
+
+        # Detectar si corre desde el .exe o desde el script .py
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Forzar la ruta hacia la carpeta latex_system
+        path_latex_portable = os.path.join(base_dir, "latex_system", "miktex", "bin", "x64")
+
+        # Inyectar esa ruta en las variables de entorno de Windows
+        my_env = os.environ.copy()
+        my_env["PATH"] = path_latex_portable + os.pathsep + my_env.get("PATH", "")
+
+        # Forzar la bandera de Windows para ocultar la consola CMD
+        startup_flags = subprocess.CREATE_NO_WINDOW
+        ejecutable_latex = os.path.join(path_latex_portable, "pdflatex.exe")
+
         os.chdir(directorio_aux) # CAMBIO DE DIRECTORIO TEMPORAL
         
         for i in range(2):
             # Al estar ya dentro de aux_files, no necesitamos -output-directory
             result = subprocess.run(
-                ['pdflatex', '-interaction=nonstopmode', output_tex_name],
+                [ejecutable_latex, '-interaction=nonstopmode', output_tex_name],
                 capture_output=True,
-                text=True
+                text=True,
+                creationflags=startup_flags,    # No mostramos la terminal
+                env=my_env                      # Latex portable
             )
-
         # Volvemos a la raíz
         os.chdir(directorio_root)
         nombre_informe = f"Informe-Final-{now.day:02d}-{now.month:02d}-{now.year}_{now.hour:02d}-{now.minute:02d}.pdf"
-        # 5. Mover el PDF resultante a la raíz
+        # Mover el PDF resultante a la raíz
         pdf_generado = os.path.join(directorio_aux, "informe_compilado.pdf")
         if os.path.exists(pdf_generado):
             ruta_carpeta_informes = os.path.join(directorio_root, "informes")

@@ -24,11 +24,11 @@ import os
 from PyQt5.QtWidgets import QFileDialog
 import pandas as pd
 import matplotlib.pyplot as plt
+import subprocess
 from matplotlib.patches import Rectangle
-import my_report
 
 import incertidumbre
-
+import my_report
 
 DEBUGG = False
 DARK_MODE = True
@@ -140,7 +140,12 @@ class TrazadorApp(QWidget):
         # SEÑALES
         self.ui.select_folder_button.clicked.connect(self.select_folder)
         self.ui.refresh_button.clicked.connect(self.refresh_ports)
-        self.ui.open_button.clicked.connect(self.open_port)
+    
+        if DEBUGG:
+            self.ui.open_button.clicked.connect(self.open_port)
+        else:
+            self.ui.open_button.clicked.connect(self.auto_conectar)
+    
         self.ui.send_button.clicked.connect(self.send_data)
         self.ui.btn_config.clicked.connect(self.send_configuration)
         self.ui.btn_test.clicked.connect(self.realizar_test)
@@ -177,7 +182,6 @@ class TrazadorApp(QWidget):
 
         self.refresh_ports()
 
-        # if DEBUGG:
         os.makedirs("Resultados_Default",exist_ok=True)
         self.proyect_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Resultados_Default")
         # Chequeo si ya existian carpetas de proyecto, si no existían las creo
@@ -189,9 +193,47 @@ class TrazadorApp(QWidget):
         self.ui.status_label.setText(f"Carpeta seleccionada:\n{self.proyect_path}")
         self.ui.status_label.setStyleSheet("color: green;")
 
-        # No lo borro porque podria usarse la verdad, por comodidad me parecio un paso extra inecesario
-        # else:
-            # self.open_folder_dialog()
+    def auto_conectar(self):
+        """
+        Recorre los puertos, envía el "comando" y se conecta al correcto
+        """
+        self.ui.com_status_label.setText(f"Buscando equipo caracterizador...")
+        
+        puertos_disponibles = serial.tools.list_ports.comports()
+        
+        for puerto in puertos_disponibles:
+            try:
+                # Abrimos el puerto temporalmente
+                puerto_temp = serial.Serial(puerto.device, 115200, timeout=2) # Timeout de 2 seg máx
+                
+                # Le damos un instante al ESP32 para reaccionar al abrir el puerto
+                QThread.msleep(1500) # Al abrir el Serial, los ESP32 a veces se reinician
+                
+                # Vaciamos la basura que pueda haber y enviamos el ping
+                puerto_temp.reset_input_buffer()
+                puerto_temp.write(b"CARACTERIZADOR_JOJOJO\n")
+                
+                # Leemos la respuesta
+                respuesta = puerto_temp.readline().decode('utf-8', errors='ignore').strip()
+                
+                if respuesta == "CARACTERIZADOR_JOJOJO_OK":
+                    # Cerramos el temporal y usamos nuestra función oficial
+                    puerto_temp.close()
+                    self.ui.port_combo.setCurrentText(puerto.device)
+                    self.open_port()
+                    self.ui.com_status_label.setText(f"Equipo encontrado y conectado en {puerto.device}")
+                    return True
+                else:
+                    # No es el equipo
+                    puerto_temp.close()
+                    
+            except Exception as e:
+                # Si el puerto está ocupado por otro programa, se pasa al siguiente
+                pass
+                
+        self.ui.com_status_label.setText(f"No se encontró el equipo. Revise la conexión USB.")
+        QMessageBox.warning(self, "Error", "No se encontró el caracterizador. Revise que esté conectado.")
+        return False
 
 
     def open_folder_dialog(self):
@@ -213,14 +255,14 @@ class TrazadorApp(QWidget):
                 subfolder_path = os.path.join(self.proyect_path, subfolder)
                 if not os.path.exists(subfolder_path):
                     os.makedirs(subfolder_path)
-            self.ui.status_label.setText(f"Carpeta seleccionada:\n{self.proyect_path}")
+            self.ui.status_label.setText(f"Carpeta Seleccionada:\n{self.proyect_path}")
             self.ui.status_label.setStyleSheet("color: green;")
 
     def select_folder(self):
         '''
         Metodo que permite abrir una ventana y seleccionar una carpeta donde se guardarán los archivos generados
         '''
-        folder = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta")
+        folder = QFileDialog.getExistingDirectory(self, "Seleccionar Carpeta")
         if folder:
             self.proyect_path = folder
             # Chequeo si ya existian carpetas de proyecto, si no existían las creo
@@ -229,9 +271,8 @@ class TrazadorApp(QWidget):
                 subfolder_path = os.path.join(self.proyect_path, subfolder)
                 if not os.path.exists(subfolder_path):
                     os.makedirs(subfolder_path)
-            self.ui.status_label.setText(f"Carpeta seleccionada:\n{folder}")
+            self.ui.status_label.setText(f"Carpeta Seleccionada:\n{folder}")
             self.ui.status_label.setStyleSheet("color: green;")
-
 
     def reset_ee_count(self):
         self.refresh_count = 0
@@ -407,25 +448,21 @@ class TrazadorApp(QWidget):
         Carga el CSV en un DataFrame, detectando la fila de encabezados.
         type: 'salida' , 'entrada' , 'todo'
         """
-        # 1. Leer todas las lineas para buscar el encabezado
+        # Leer todas las lineas para buscar el encabezado
         with open(path, "r", encoding="utf-8") as f:
             lineas = f.readlines()
         
         header_line = 0
-        # 2. Buscamos la linea que tenga los encabezados correctos
+        # Buscamos la linea que tenga los encabezados correctos
         for i, linea in enumerate(lineas):
             # Buscamos coincidencias con lo que manda el ESP32 ahora
             if "Indice" in linea and "cuentas" in linea:
                 header_line = i
                 break
 
-        # 3. Cargar el CSV ignorando las lineas de comentarios (#) automáticamente
-        # Pandas es inteligente: si le decimos comment='#', ignora las lineas metadata de arriba
-        # pero necesitamos asegurarnos de leer la fila de headers correcta.
+        # Cargar el CSV ignorando las lineas de comentarios (#) automáticamente
         
         try:
-            # header=0 relativo a los datos leidos despues de saltar filas metadata si fuera necesario
-            # Pero como usas skiprows, vamos directo a la linea.
             df = pd.read_csv(path, skiprows=header_line, comment='#')
             
             # Limpieza básica: Eliminar columnas vacias o filas de error si las hubiera
@@ -446,7 +483,7 @@ class TrazadorApp(QWidget):
         if os.path.exists(self.exit_path):
             csv_path = os.path.join(self.exit_path, "salida.csv")
             
-            # 1. Cargar datos
+            # Cargar datos
             try:
                 self.cargar_csv(csv_path, 'salida')
                 if self.exit_df is None or self.exit_df.empty:
@@ -463,7 +500,7 @@ class TrazadorApp(QWidget):
         if os.path.exists(self.entry_path):
             csv_path = os.path.join(self.entry_path, "entrada.csv")
             
-            # 1. Cargar datos
+            # Cargar datos
             try:
                 self.cargar_csv(csv_path, 'entrada')
                 if self.entry_df is None or self.entry_df.empty:
@@ -478,10 +515,10 @@ class TrazadorApp(QWidget):
     def generate_report(self):
         base_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # 1. Definir la ruta del script
+        # Definir la ruta del script
         script_path = os.path.join(base_dir, "my_report.py")
         
-        # 2. Obtener el modelo del input
+        # Obtener el modelo del input
         modelo = self.ui.model_input.text().strip()
         if not modelo: 
             modelo = "Generico"
@@ -492,21 +529,21 @@ class TrazadorApp(QWidget):
             QMessageBox.critical(self, "Error", f"No se encuentra el script en:\n{script_path}")
             return
         
-        # 3. Crear y mostrar diálogo de espera (Modal)
+        # Crear y mostrar diálogo de espera (Modal)
         waiting = WaitingDialog(self)
         waiting.show()
         # Forzar a que la UI se pinte antes de bloquear el hilo
         QApplication.processEvents()
 
         try:
-             # 4. EJECUCIÓN ÚNICA: Pasamos 'modelo' en la lista de argumentos
+             # EJECUCIÓN ÚNICA: Pasamos 'modelo' en la lista de argumentos
             t_val, h_val = self.leer_condiciones('salida')
             my_report.generar_pdf_final(temperatura=t_val, proyect_path=self.proyect_path, humedad=h_val, Muestras=cant_muestras, modelo_transistor=modelo)
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Fallo al generar informe:\n{e}")
         finally:
-            # 5. Cerrar diálogo al finalizar
+            # Cerrar diálogo al finalizar
             waiting.close()
 
     def full_generate_report(self):
@@ -528,7 +565,7 @@ class TrazadorApp(QWidget):
         self.send_configuration()
         QThread.msleep(1)
         
-        # --- INICIO DE LA MÁQUINA DE ESTADOS ---
+        #  INICIO DE LA MÁQUINA DE ESTADOS 
         self.current_state = 1  # Pasamos a Estado 1 (Testing)
         self.realizar_test()    # Disparamos la acción
         
@@ -544,16 +581,15 @@ class TrazadorApp(QWidget):
             return
 
         if paso_ok:
-            # --- TRANSICIÓN: DEL TEST (1) A ENTRADA (2) ---
+            #  TRANSICIÓN: DEL TEST (1) A ENTRADA (2) 
             self.current_state = 2
             self.ui.full_report_button.setText("Midiendo Entrada...")
             self.ui.status_label.setText("Estado: Midiendo Curva de Entrada...")
             
-            # Disparar siguiente acción (usamos tu función existente)
             self.send_data("LEER_ENTRADA") 
             
         else:
-            # --- FALLO: ABORTAR ---
+            #  FALLO: ABORTAR 
             mensaje_error = (
                 "El componente no pasó el TEST.\n\n"
                 "Posibles causas:\n"
@@ -569,7 +605,7 @@ class TrazadorApp(QWidget):
         """
         # CASO A: Terminó el barrido de ENTRADA (Estado 2)
         if self.current_state == 2:
-            # --- TRANSICIÓN: DE ENTRADA (2) A SALIDA (3) ---
+            #  TRANSICIÓN: DE ENTRADA (2) A SALIDA (3) 
             self.current_state = 3
             self.ui.full_report_button.setText("Midiendo Salida...")
             self.ui.status_label.setText("Estado: Midiendo Curva de Salida...")
@@ -582,7 +618,7 @@ class TrazadorApp(QWidget):
 
         # CASO B: Terminó el barrido de SALIDA (Estado 3)
         elif self.current_state == 3:
-            # --- FIN: DE SALIDA (3) A REPORTE ---
+            #  FIN: DE SALIDA (3) A REPORTE 
             self.ui.full_report_button.setText("Generando PDF...")
             self.ui.status_label.setText("Estado: Procesando datos...")
             
@@ -590,7 +626,7 @@ class TrazadorApp(QWidget):
             try:
                 self.procesar_y_graficar_entrada()
                 self.procesar_y_graficar_salida()
-                self.generate_report() # Tu script externo
+                self.generate_report()
                 
                 # Restaurar todo
                 self.ui.status_label.setText("Estado: ¡Informe Terminado!")
@@ -640,7 +676,7 @@ class TrazadorApp(QWidget):
                 cmd_muestras = f"MUESTRAS{n_muestras}"
                 self.serial_port.write((cmd_muestras + '\n').encode())
                 
-                # Pequeña pausa de seguridad (opcional, pero recomendada en serial)
+                # Pequeña pausa de seguridad
                 QThread.msleep(50) 
                 
                 # CURVAS
@@ -648,10 +684,8 @@ class TrazadorApp(QWidget):
                 self.serial_port.write((cmd_curvas + '\n').encode())
                 
                 if DEBUGG:
-                    self.ui.receive_text.append(f"--- CONFIGURACIÓN ENVIADA ---\n> {cmd_muestras}\n> {cmd_curvas}")
+                    self.ui.receive_text.append(f" CONFIGURACIÓN ENVIADA \n> {cmd_muestras}\n> {cmd_curvas}")
                 
-                # QMessageBox.information(self, "Éxito", f"Configurado:\n- Muestras: {n_muestras}\n- Curvas: {n_curvas}")
-
             except Exception as e:
                 QMessageBox.critical(self, "Error Serial", f"Fallo al enviar configuración:\n{e}")
         else:
@@ -671,7 +705,7 @@ class TrazadorApp(QWidget):
         
         total_ms = 0.0
         
-        # --- CONSTANTES "MEDIDAS" ---
+        #  CONSTANTES "MEDIDAS" 
         # SALIDA
         OUT_OVERHEAD_PER_CURVE = 448.0  # Tiempo muerto por curva (setup DAC, delay)
         OUT_TIME_PER_SAMPLE    = 276.0  # Tiempo de proceso por cada muestra de promedio
@@ -680,7 +714,7 @@ class TrazadorApp(QWidget):
         IN_BASE_TIME           = 2200.0 # Tiempo fijo (búsqueda de límites + overhead)
         IN_TIME_PER_SAMPLE     = 392.0  # Tiempo extra por cada muestra de promedio
 
-        # --- CÁLCULO ---
+        #  CÁLCULO 
 
         if not DEBUGG:
             modo = "LEER_TODO"
@@ -700,7 +734,7 @@ class TrazadorApp(QWidget):
             t_entrada = IN_BASE_TIME + (IN_TIME_PER_SAMPLE * n_muestras)
             total_ms = t_salida + t_entrada
 
-        # --- FORMATO ---
+        #  FORMATO 
         texto_tiempo = ""
         if total_ms < 1000:
             texto_tiempo = f"{int(total_ms)} ms"
@@ -714,9 +748,9 @@ class TrazadorApp(QWidget):
         self.ui.time_label.setText(f'Tiempo estimado: ~{texto_tiempo}')
 
 
-    # ------------------------------------------------------------------------
+    # 
     #   GETTERS
-    # ------------------------------------------------------------------------
+    # 
 
     def get_output_data(self):
         """
@@ -768,9 +802,6 @@ class TrazadorApp(QWidget):
         df_phys['U_IC_mA'] = U_IC_mA
         df_phys['IB_uA'] = IB_uA
         df_phys['U_IB_uA'] = U_IB_uA
-
-        # Opcional: Guardar CSV físico intermedio
-        # df_phys.to_csv(os.path.join(self.exit_path, "salida_fisica_procesada.csv"), index=False)
         
         return df_phys
 
@@ -834,14 +865,11 @@ class TrazadorApp(QWidget):
         df_phys['HFE'] = HFE_med
         df_phys['U_HFE'] = U_HFE
 
-        # Opcional: Guardar CSV físico intermedio
-        # df_phys.to_csv(os.path.join(self.exit_path, "entrada_fisica_procesada.csv"), index=False)
-
         return df_phys
     
-    # ------------------------------------------------------------------------
+    # 
     #   PLOTTER
-    # ------------------------------------------------------------------------
+    # 
     
     def plot_generico(self, df, x_col, y_col, dx_col, dy_col, 
                       xlabel, ylabel, title, filename, 
@@ -905,7 +933,7 @@ class TrazadorApp(QWidget):
                 else:
                     serie_u = pd.Series(0, index=grupo.index)
 
-                # 2. Aplicar el método de selección (mean, last, first)
+                # Aplicar el método de selección (mean, last, first)
                 val_disp = 0.0
                 u_disp = 0.0
 
@@ -954,7 +982,7 @@ class TrazadorApp(QWidget):
         if group_col: 
             plt.legend(fontsize='small')
         
-        # Zoom inteligent: Para escalas logarítmicas (evita ceros)
+        # Zoom inteligente: Para escalas logarítmicas (evita ceros)
         if yscale == 'log':
             valid_y = df[df[y_col] > 0][y_col]
             if not valid_y.empty:
@@ -967,9 +995,9 @@ class TrazadorApp(QWidget):
         
         if DEBUGG: print(f"Generado: {filename}")
 
-    # ------------------------------------------------------------------------
+    # 
     #   FUNCIONES GENERALES DE ENTRADA Y SALIDA (ya se agrupa todo)
-    # ------------------------------------------------------------------------
+    # 
 
     def procesar_y_graficar_entrada(self):
         """
@@ -1084,7 +1112,7 @@ class TrazadorApp(QWidget):
         )
 
         # Guardar CSV Físico final
-        # Este archivo es el que va a leer luego tu script 'my_report.py'
+        # Este archivo es el que va a leer luego el script 'my_report.py'
         path_csv = os.path.join(self.proyect_path, "Salida", "salida_fisica.csv")
         df_out.to_csv(path_csv, index=False)
         
