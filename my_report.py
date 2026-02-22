@@ -220,36 +220,34 @@ def generar_pdf_final(Muestras, proyect_path, temperatura=-999, humedad=-999, mo
         print("Compilando informe...")
 
 
-        # CONFIGURACIÓN LATEX: EXCLUSIVO PARA WINDOWS (PORTABLE)
+        # CONFIGURACIÓN LATEX: EXCLUSIVO PARA LINUX (PORTABLE)
 
-        # Detectar si corre desde el .exe o desde el script .py
+        # Detectar si corre desde PyInstaller o desde el script .py
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_dir = sys._MEIPASS
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # Forzar la ruta hacia la carpeta latex_system
-        path_latex_portable = os.path.join(base_dir, "latex_system", "miktex", "bin", "x64")
+        # Forzar la ruta hacia la carpeta latex_system de Linux (TeX Live)
+        path_latex_portable = os.path.join(base_dir, "latex_system", "bin", "x86_64-linux")
 
-        # Inyectar esa ruta en las variables de entorno de Windows
+        # Inyectar esa ruta en las variables de entorno para que encuentre sus librerías
         my_env = os.environ.copy()
         my_env["PATH"] = path_latex_portable + os.pathsep + my_env.get("PATH", "")
 
-        # Forzar la bandera de Windows para ocultar la consola CMD
-        startup_flags = subprocess.CREATE_NO_WINDOW
-        ejecutable_latex = os.path.join(path_latex_portable, "pdflatex.exe")
+        # Archivo ejecutable
+        ejecutable_latex = os.path.join(path_latex_portable, "pdflatex")
 
         os.chdir(directorio_aux) # CAMBIO DE DIRECTORIO TEMPORAL
         
         for i in range(2):
-            # Al estar ya dentro de aux_files, no necesitamos -output-directory
             result = subprocess.run(
                 [ejecutable_latex, '-interaction=nonstopmode', output_tex_name],
                 capture_output=True,
                 text=True,
-                creationflags=startup_flags,    # No mostramos la terminal
-                env=my_env                      # Latex portable
+                env=my_env   # Entorno portable
             )
+            
         # Volvemos a la raíz
         os.chdir(directorio_root)
         nombre_informe = f"Informe-Final-{now.day:02d}-{now.month:02d}-{now.year}_{now.hour:02d}-{now.minute:02d}.pdf"

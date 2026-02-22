@@ -65,22 +65,28 @@ def apply_dark_theme(app):
 
 class Ui_Form:
     def setupUi(self, Form, debugg = False):
-        Form.setWindowTitle("Selector de Puerto COM")
+        Form.setWindowTitle("Caracterizador De Transistores BJT NPN")
         layout = QVBoxLayout()
 
-        layout.addWidget(QLabel("Seleccione un puerto COM:"))
+        # Contenedor manual de puertos (para debugg)
+        self.lbl_select_port = QLabel("Seleccione un puerto COM:")
+        layout.addWidget(self.lbl_select_port)
 
-        # Layout horizontal para combo + botón refresh
-        port_layout = QHBoxLayout()
+        self.manual_port_container = QWidget()
+        port_layout = QHBoxLayout(self.manual_port_container)
+        port_layout.setContentsMargins(0, 0, 0, 0)
+        
         self.port_combo = QComboBox()
         port_layout.addWidget(self.port_combo)
 
-        self.refresh_button = QPushButton("↻")  # Botón de refresh
-        #self.refresh_button.setToolTip("Actualizar lista de puertos")
+        self.refresh_button = QPushButton("↻")  
         port_layout.addWidget(self.refresh_button)
 
-        layout.addLayout(port_layout)
+        layout.addWidget(self.manual_port_container)
 
+        # ------------------
+
+        # Botón principal de conexión (siempre (cambiará su texto))
         self.open_button = QPushButton("Abrir Puerto")
         layout.addWidget(self.open_button)
 
@@ -93,7 +99,7 @@ class Ui_Form:
         layout.addWidget(self.status_label)
 
         # Botón para seleccionar carpeta
-        self.select_folder_button = QPushButton("Seleccionar carpeta de proyecto")
+        self.select_folder_button = QPushButton("Seleccionar Carpeta de Proyecto")
         layout.addWidget(self.select_folder_button)
 
         # Enviar datos
@@ -112,13 +118,16 @@ class Ui_Form:
 
         self.btn_test = QPushButton("Test")
         self.btn_test.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold;") # Violeta para distinguir
-        self.btn_test.setToolTip("Verificar estado del transistor (HFE >= 50)")
+        self.btn_test.setToolTip("Verificar estado del transistor (HFE >= 20)")
         h_layout.addWidget(self.btn_test) # Mismo layout horizontal
 
         if not debugg:
             self.btn_test.setVisible(False)  # Existe, pero es invisible
             self.send_combo.setVisible(False)
             self.send_button.setVisible(False)
+            self.lbl_select_port.setVisible(False)
+            self.manual_port_container.setVisible(False)
+            self.open_button.setText("Conectar Equipo Automáticamente")
 
         self.config_group = QGroupBox("Configuración Inicial")
         self.config_layout = QHBoxLayout()
@@ -142,7 +151,7 @@ class Ui_Form:
         if not debugg:
             self.btn_config.setVisible(False)
 
-        self.time_label = QLabel("Tiempo estimado: -")
+        self.time_label = QLabel("Tiempo Estimado: -")
         self.time_label.setStyleSheet("color: #2a82da; font-weight: bold; font-size: 12px;")
         self.time_label.setAlignment(Qt.AlignCenter)
 
